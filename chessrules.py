@@ -6,16 +6,15 @@ def is_move_valid(pos) -> bool:
 def is_square_attacked(target_row, target_col, defender_color, np_matrix):
     enemy_color = "black" if defender_color == "white" else "white"
     
-    # 1. Comprobar ataques de peones enemigos
     pawn_direction = 1 if enemy_color == "white" else -1
     for dc in [-1, 1]:
         r, c = target_row + pawn_direction, target_col + dc
         if 0 <= r < 8 and 0 <= c < 8:
-            # Los peones se representan con valor absoluto 1
+
             if abs(np_matrix[r][c]) == 1 and ((np_matrix[r][c] > 0 and enemy_color == "white") or (np_matrix[r][c] < 0 and enemy_color == "black")):
                 return True
 
-    # 2. Comprobar ataques de caballos enemigos (Valor absoluto 2)
+   
     knight_offsets = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
     for dr, dc in knight_offsets:
         r, c = target_row + dr, target_col + dc
@@ -23,7 +22,6 @@ def is_square_attacked(target_row, target_col, defender_color, np_matrix):
             if abs(np_matrix[r][c]) == 2 and ((np_matrix[r][c] > 0 and enemy_color == "white") or (np_matrix[r][c] < 0 and enemy_color == "black")):
                 return True
 
-    # 3. Comprobar ataques de rayos en direcciones ortogonales (Torres=4, Damas=5) y reyes en corto (6)
     orthogonal_directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     for dr, dc in orthogonal_directions:
         r, c = target_row + dr, target_col + dc
@@ -34,12 +32,11 @@ def is_square_attacked(target_row, target_col, defender_color, np_matrix):
                 is_enemy = (val > 0 and enemy_color == "white") or (val < 0 and enemy_color == "black")
                 if is_enemy and (abs(val) in [4, 5] or (abs(val) == 6 and step == 1)):
                     return True
-                break # Una pieza propia o enemiga bloquea la línea de visión lejana
+                break 
             r += dr
             c += dc
             step += 1
 
-    # 4. Comprobar ataques de rayos en direcciones diagonales (Alfiles=3, Damas=5) y reyes en corto (6)
     diagonal_directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
     for dr, dc in diagonal_directions:
         r, c = target_row + dr, target_col + dc
@@ -50,33 +47,111 @@ def is_square_attacked(target_row, target_col, defender_color, np_matrix):
                 is_enemy = (val > 0 and enemy_color == "white") or (val < 0 and enemy_color == "black")
                 if is_enemy and (abs(val) in [3, 5] or (abs(val) == 6 and step == 1)):
                     return True
-                break # Bloqueo de línea de visión
+                break 
             r += dr
             c += dc
             step += 1
 
     return False
 
-def is_in_check(board, defender_color):
-    row, col = np.unravel_index(np.argmax(board), board.shape)
-    return is_square_attacked(row, col, defender_color, board)
+def get_legal_moves(moves, row_start, col_start, board, last_pawn_move=None):
+    legal = []
+    piece_value = board[row_start, col_start]
+    color = "white" if piece_value > 0 else "black"
 
+    if color == "white":
+        king_row, king_col = np.unravel_index(np.argmax(board), board.shape)
+    else:
+        king_row, king_col = np.unravel_index(np.argmin(board), board.shape)
 
-def pawn_move(color, row, col, board,last_pawn_move): # Last Move en un dict/string de Forma, row, col
+    is_king = abs(piece_value) == 6
+
+    for move in moves:
+        row, col = move
+
+        # Guardar estado
+        captured = board[row][col]
+        ep_captured = 0
+        ep_row = -1
+
+        # Aplicar
+        board[row_start][col_start] = 0
+        board[row][col] = piece_value
+
+        # En passant
+        if abs(piece_value) == 1 and col != col_start and captured == 0:
+            ep_row = row_start
+            ep_captured = board[row_start][col]
+            board[row_start][col] = 0
+
+        check_row = row if is_king else king_row
+        check_col = col if is_king else king_col
+
+        if not is_square_attacked(check_row, check_col, color, board):
+            legal.append(move)
+
+        # Deshacer
+        board[row_start][col_start] = piece_value
+        board[row][col] = captured
+        if ep_row != -1:
+            board[ep_row][col] = ep_captured
+
+    return legal
+
+def is_in_check(board, color):
+    if color == "white":
+        king_row, king_col = np.unravel_index(np.argmax(board), board.shape)
+    else:
+        king_row, king_col = np.unravel_index(np.argmin(board), board.shape)
+    return is_square_attacked(king_row, king_col, color, board)
+
+def get_all_moves(piece, row, col, board, last_pawn_move, board_obj, color):
+    abs_piece = abs(piece)
+    if abs_piece == 1: return pawn_move(color, row, col, board, last_pawn_move)
+    elif abs_piece == 2: return knight_move(color, row, col, board)
+    elif abs_piece == 3: return bishop_move(color, row, col, board)
+    elif abs_piece == 4: return rook_move(color, row, col, board)
+    elif abs_piece == 5: return queen_move(color, row, col, board)
+    elif abs_piece == 6: return king_move(color, row, col, board, board_obj)
+    return []
+
+def get_game_state(board, color, last_pawn_move, board_obj):
+    value = 1 if color == "white" else -1
+
+    for row in range(8):
+        for col in range(8):
+            piece = board[row][col]
+            if piece * value <= 0:
+                continue
+            pseudo = get_all_moves(piece, row, col, board, last_pawn_move, board_obj, color)
+            if get_legal_moves(pseudo, row, col, board, last_pawn_move):
+                return "ongoing"
+
+    return "checkmate" if is_in_check(board, color) else "stalemate"
+
+def needs_promotion(board):
+    for col in range(8):
+        if board[0][col] == 1:
+            return (0, col, "white")
+        if board[7][col] == -1:
+            return (7, col, "black")
+    return None
+
+def pawn_move(color, row, col, board,last_pawn_move):
     moves = []
     
-    # Dirección: Negro baja (1), Blanco sube (-1)
+ 
     direction = 1 if color == "black" else -1
     starting_row = 1 if color == "black" else 6
     next_row = row + direction
     
-    # ---- AVANCES ----
+
     if is_move_valid(next_row):
-        # Avanzar 1 casilla
+       
         if board[next_row][col] == 0:
             moves.append((next_row, col))
             
-            # Avanzar 2 casillas (Solo desde fila inicial y si la casilla está libre)
+            
             two_rows = row + direction * 2
             if row == starting_row and board[two_rows][col] == 0:
                 moves.append((two_rows, col))
@@ -86,10 +161,9 @@ def pawn_move(color, row, col, board,last_pawn_move): # Last Move en un dict/str
 
             if 0 <= capture_col <= 7:
                 other_piece = board[next_row][capture_col]
-                # Si no está vacía y el signo matemático es opuesto (es enemigo)
+                
                 if other_piece != 0 and (other_piece * direction) > 0:
                     moves.append((next_row, capture_col))
-    # Al paso
     
     row_start = last_pawn_move["start_row"]
     row_end = last_pawn_move["target_row"]
@@ -115,7 +189,7 @@ def king_move(color, row, col, board, board_obj):
     moves = []
     value = -1 if color == "black" else 1
     
-    # 1. Movimientos normales del Rey (8 direcciones)
+
     for i in [-1, 0, 1]:
         for j in [-1, 0, 1]:
             if i == 0 and j == 0: 
@@ -236,4 +310,4 @@ def queen_move(color, row, col, board):
     moves = bishop_move(color, row, col, board)
     for move in rook_move(color, row,col,board):
         moves.append(move)
-    return moves 
+    return moves
