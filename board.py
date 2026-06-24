@@ -5,8 +5,7 @@ from chessrules import *
 
 IMAGES_DIR = Path(__file__).resolve().parent.joinpath("pieces")
 
-def move_piece(pos, visual_board, square_width, pieces, turn_holder):
-
+def move_piece(pos, visual_board, square_width, pieces, turn_holder, last_pawn_move):
     target_square_col = (pos[0] - visual_board.offset_x) // square_width
     target_square_row = (pos[1] - visual_board.offset_y) // square_width
     
@@ -15,13 +14,36 @@ def move_piece(pos, visual_board, square_width, pieces, turn_holder):
     
     try:
         start_row, start_col = visual_board.selected_squares[0]
-        # Evitar mover al mismo lugar
         if start_row == target_square_row and start_col == target_square_col:
             visual_board.stop_selecting()
             return False
-        if not (target_square_row,target_square_col) in visual_board.selected_squares or (target_square_row,target_square_col) == (start_row,start_col):
+        if not (target_square_row, target_square_col) in visual_board.selected_squares or (target_square_row, target_square_col) == (start_row, start_col):
             print("Not available")
             return False
+            
+        if abs(visual_board.np_matrix[start_row][start_col]) == 1:
+            if visual_board.np_matrix[start_row][start_col] == 1:
+                if target_square_row == 2:
+                    if last_pawn_move["last_move"] == True and last_pawn_move["target_row"] == 3 and target_square_col == last_pawn_move["target_col"]:
+                        visual_board.np_matrix[last_pawn_move["target_row"]][last_pawn_move["target_col"]] = 0
+                        
+            else:
+                if target_square_row == 5:
+                    if last_pawn_move["last_move"] == True and last_pawn_move["target_row"] == 4 and target_square_col == last_pawn_move["target_col"]:
+                        visual_board.np_matrix[last_pawn_move["target_row"]][last_pawn_move["target_col"]] = 0
+            
+            
+            last_pawn_move.clear()
+            last_pawn_move.update({
+                "start_row": start_row,
+                "target_col": target_square_col,
+                "target_row": target_square_row,
+                "last_move": True
+            })
+            
+        else:
+            last_pawn_move["last_move"] = False
+            
         visual_board.move(start_row, start_col, target_square_row, target_square_col, pieces)
         return True
     except IndexError as e:
@@ -50,12 +72,10 @@ class Piece:
         diccionario_piezas = {1: 'P', 2: 'N', 3: 'B', 4: 'R', 5: 'Q', 6: 'K'}
         self.piece_type = diccionario_piezas[abs(value)]
         
-        # Carga de imágenes optimizada con convert_alpha
         image_path = IMAGES_DIR.joinpath(f"{self.color}_{self.piece_type}.png")
         try:
             self.image = pygame.image.load(image_path).convert_alpha()
         except FileNotFoundError:
-            # Fallback visual por si no encuentra las imágenes
             self.image = pygame.Surface((int(size*.8), int(size*.8)))
             self.image.fill((255, 0, 0) if self.color == "white" else (0, 0, 255))
             
@@ -64,7 +84,7 @@ class Piece:
         self.image = pygame.transform.scale(self.image, (self.imagesize_x, self.imagesize_y))
         self.rect = self.image.get_rect()
         
-        # Calcular posición
+        
         padding_x = (size - self.imagesize_x) // 2
         padding_y = (size - self.imagesize_y) // 2
         self.x_pos = self.column * self.size + padding_x
@@ -74,24 +94,25 @@ class Piece:
     def draw(self, surface, x, y):
         surface.blit(self.image, (x + self.x_pos, y + self.y_pos))
 
-    def clicked(self, board,np_board):
+    def clicked(self, board,np_board,last_pawn_move):
         if len(board.selected_squares) > 0:
             self.stop_selecting(board)
         else:
-            self.select(board,np_board)
+            self.select(board,np_board,last_pawn_move)
 
-    def select(self, board, np_board):
+    def select(self, board, np_board,last_pawn_move):
         self.selected = True
-        board.select(self.row, self.column,self.get_available_moves(np_board, board))
+        board.select(self.row, self.column,self.get_available_moves(np_board, board,last_pawn_move))
 
     def stop_selecting(self, board):
         self.selected = False
         board.stop_selecting()
 
-    def get_available_moves(self,board, board_obj):
+    def get_available_moves(self,board, board_obj, last_pawn_move):
         match self.piece_type:
             case "P":
-                return pawn_move(self.color,self.row,self.column, board)
+                return pawn_move(self.color,self.row,self.column, board, last_pawn_move)
+                
             case "N":
                 return knight_move(self.color,self.row,self.column,board)
             case "B":
@@ -126,7 +147,7 @@ class Board(pygame.sprite.Sprite):
         self.sincronize_np(np_matrix, pieces)
 
     def sincronize_np(self, np_matrix, pieces):
-        pieces.clear() # ¡CRUCIAL! Vaciamos la lista vieja para evitar duplicados fantasma
+        pieces.clear()
         self.matrix = [[None for _ in range(8)] for _ in range(8)]
         
         for row in range(8):
@@ -210,12 +231,7 @@ class Board(pygame.sprite.Sprite):
         self.sincronize_np(self.np_matrix, pieces)
         self.selected_squares.clear()
         self.selected_piece = 0
-
-
-    def get_possible_moves(self, pos):
-        row,col = pos
-        moves = self.matrix[row][col].get_available_moves(self.np_matrix, self.matrix)
-        
+    
         
 def main():
     pygame.init()
@@ -229,6 +245,12 @@ def main():
     logic_matrix = starting_pos()
     whiteTurn = True
     pieces = []
+    last_pawn_move = {
+        "start_row": 7,
+        "target_col": 5,
+        "target_row": 1,
+        "last_move": False}
+    
     
     visual_board = Board((SCREEN_WIDTH - square_width * 8) // 2, (SCREEN_HEIGHT - square_width * 8) // 2, square_width, logic_matrix, pieces)
 
@@ -241,22 +263,22 @@ def main():
                 pos = pygame.mouse.get_pos()
                 clicked_sprites = [s for s in pieces if s.rect.collidepoint(pos)]
                 
-                # Turno actual estructurado
+                
                 current_color = "white" if whiteTurn else "black"
                 
                 if clicked_sprites:
-                    # Si tocamos una pieza del propio turno, la seleccionamos
                     if clicked_sprites[0].color == current_color:
-                        clicked_sprites[0].clicked(visual_board, visual_board.np_matrix)
-                    # Si tocamos una pieza rival y tenemos algo seleccionado, intentamos captura
+                        clicked_sprites[0].clicked(visual_board, visual_board.np_matrix, last_pawn_move)
                     elif visual_board.selected_piece != 0:
-                        if move_piece(pos, visual_board, square_width, pieces, whiteTurn):
-                            whiteTurn = not whiteTurn # Cambiar turno si el movimiento fue válido
+                        if move_piece(pos, visual_board, square_width, pieces, whiteTurn, last_pawn_move):
+                            whiteTurn = not whiteTurn
                 else:
-                    # Click en casilla vacía: si hay pieza seleccionada, se mueve
+
                     if visual_board.selected_piece != 0:
-                        if move_piece(pos, visual_board, square_width, pieces, whiteTurn):
-                            whiteTurn = not whiteTurn # Cambiar turno si el movimiento fue válido
+                        if move_piece(pos, visual_board, square_width, pieces, whiteTurn,last_pawn_move):
+                            whiteTurn = not whiteTurn 
+                        if is_in_check(visual_board.np_matrix, "white" if whiteTurn else "black"):
+                            print("check")
 
         screen.fill("black")
         visual_board.draw(screen)

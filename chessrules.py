@@ -1,3 +1,4 @@
+import numpy as np
 
 def is_move_valid(pos) -> bool:
     return 0<=pos<=7
@@ -6,7 +7,7 @@ def is_square_attacked(target_row, target_col, defender_color, np_matrix):
     enemy_color = "black" if defender_color == "white" else "white"
     
     # 1. Comprobar ataques de peones enemigos
-    pawn_direction = -1 if enemy_color == "white" else 1
+    pawn_direction = 1 if enemy_color == "white" else -1
     for dc in [-1, 1]:
         r, c = target_row + pawn_direction, target_col + dc
         if 0 <= r < 8 and 0 <= c < 8:
@@ -56,7 +57,12 @@ def is_square_attacked(target_row, target_col, defender_color, np_matrix):
 
     return False
 
-def pawn_move(color, row, col, board):
+def is_in_check(board, defender_color):
+    row, col = np.unravel_index(np.argmax(board), board.shape)
+    return is_square_attacked(row, col, defender_color, board)
+
+
+def pawn_move(color, row, col, board,last_pawn_move): # Last Move en un dict/string de Forma, row, col
     moves = []
     
     # Dirección: Negro baja (1), Blanco sube (-1)
@@ -75,9 +81,6 @@ def pawn_move(color, row, col, board):
             if row == starting_row and board[two_rows][col] == 0:
                 moves.append((two_rows, col))
                 
-    # ---- CAPTURAS ----
-    # Protegemos que next_row esté dentro del tablero antes de mirar las diagonales
-
         for i in [-1, 1]:
             capture_col = col + i
 
@@ -86,37 +89,64 @@ def pawn_move(color, row, col, board):
                 # Si no está vacía y el signo matemático es opuesto (es enemigo)
                 if other_piece != 0 and (other_piece * direction) > 0:
                     moves.append((next_row, capture_col))
-                    
+    # Al paso
+    
+    row_start = last_pawn_move["start_row"]
+    row_end = last_pawn_move["target_row"]
+    col_end = last_pawn_move["target_col"]
+    last_move = last_pawn_move["last_move"]
+    if row == (3.5 + direction *0.5):
+        if last_move:
+            if direction == -1:
+                abs(col_end - col)
+                print(row_start)
+                if row_start == 1 and row_end == 3:
+                    if abs(col_end - col) == 1:
+                        moves.append((next_row, col_end))
+            else:
+                if row_start == 6 and row_end == 4:
+                    if abs(col_end - col) == 1:
+                        moves.append((next_row, col_end))
+        
+         
     return moves
 
 def king_move(color, row, col, board, board_obj):
     moves = []
-    value = -1 if color=="black" else 1
-    for i in [-1,0,1]:
-        for j in [-1,0,1]:
-            if i == 0 and j == 0: continue
+    value = -1 if color == "black" else 1
+    
+    # 1. Movimientos normales del Rey (8 direcciones)
+    for i in [-1, 0, 1]:
+        for j in [-1, 0, 1]:
+            if i == 0 and j == 0: 
+                continue
             move_row = row + i
             move_col = col + j
             if is_move_valid(move_row) and is_move_valid(move_col):
                 if board[move_row][move_col] * value <= 0:
-                    moves.append((move_row,move_col))
+                    if not is_square_attacked(move_row, move_col, color, board):
+                        moves.append((move_row, move_col))
+                    
+
     if not is_square_attacked(row, col, color, board):
-        if color == "white":
+        if color == "white" and row == 7: 
             if not board_obj.white_king_moved:
+
                 if not board_obj.white_rook_h_moved and board[7][5] == 0 and board[7][6] == 0:
-                    if not is_square_attacked(row, col+1, color, board) and not is_square_attacked(row, col+2, color, board):
+                    if not is_square_attacked(7, 5, color, board) and not is_square_attacked(7, 6, color, board):
                         moves.append((7, 6))
+
                 if not board_obj.white_rook_a_moved and board[7][1] == 0 and board[7][2] == 0 and board[7][3] == 0:
-                    if not is_square_attacked(row, col-1, color, board) and not is_square_attacked(row, col-2, color, board):
+                    if not is_square_attacked(7, 3, color, board) and not is_square_attacked(7, 2, color, board):
                         moves.append((7, 2))
-        else:
+        
+        elif color == "black" and row == 0: 
             if not board_obj.black_king_moved:
                 if not board_obj.black_rook_h_moved and board[0][5] == 0 and board[0][6] == 0:
-                    if not is_square_attacked(row, col+1, color, board) and not is_square_attacked(row, col+2, color, board):
+                    if not is_square_attacked(0, 5, color, board) and not is_square_attacked(0, 6, color, board):
                         moves.append((0, 6))
-                    
                 if not board_obj.black_rook_a_moved and board[0][1] == 0 and board[0][2] == 0 and board[0][3] == 0:
-                    if not is_square_attacked(row, col-1, color, board) and not is_square_attacked(row, col-2, color, board):
+                    if not is_square_attacked(0, 3, color, board) and not is_square_attacked(0, 2, color, board):
                         moves.append((0, 2))
                 
     return moves
