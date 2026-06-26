@@ -173,7 +173,6 @@ def pawn_move(color, row, col, board,last_pawn_move):
         if last_move:
             if direction == -1:
                 abs(col_end - col)
-                print(row_start)
                 if row_start == 1 and row_end == 3:
                     if abs(col_end - col) == 1:
                         moves.append((next_row, col_end))
