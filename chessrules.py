@@ -222,7 +222,6 @@ def king_move(color, row, col, board, board_obj):
                 if not board_obj.black_rook_a_moved and board[0][1] == 0 and board[0][2] == 0 and board[0][3] == 0:
                     if not is_square_attacked(0, 3, color, board) and not is_square_attacked(0, 2, color, board):
                         moves.append((0, 2))
-                
     return moves
 
 def knight_move(color, row, col, board):

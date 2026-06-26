@@ -2,61 +2,10 @@ import pygame
 import numpy as np
 from pathlib import Path
 from chessrules import *
+import bots.minimax_bot as bot
+import time
 
 IMAGES_DIR = Path(__file__).resolve().parent.joinpath("pieces")
-
-def move_piece(pos, visual_board, square_width, pieces, turn_holder, last_pawn_move):
-    target_square_col = (pos[0] - visual_board.offset_x) // square_width
-    target_square_row = (pos[1] - visual_board.offset_y) // square_width
-
-    if target_square_col > 7 or target_square_col < 0: return None
-    if target_square_row > 7 or target_square_row < 0: return None
-    try:
-        start_row, start_col = visual_board.selected_squares[0]
-        if start_row == target_square_row and start_col == target_square_col:
-            visual_board.stop_selecting()
-            return None
-        if not (target_square_row, target_square_col) in visual_board.selected_squares or (target_square_row, target_square_col) == (start_row, start_col):
-            return None
-
-        if abs(visual_board.np_matrix[start_row][start_col]) == 1:
-            if visual_board.np_matrix[start_row][start_col] == 1:
-                if target_square_row == 2:
-                    if last_pawn_move["last_move"] == True and last_pawn_move["target_row"] == 3 and target_square_col == last_pawn_move["target_col"]:
-                        visual_board.np_matrix[last_pawn_move["target_row"]][last_pawn_move["target_col"]] = 0
-            else:
-                if target_square_row == 5:
-                    if last_pawn_move["last_move"] == True and last_pawn_move["target_row"] == 4 and target_square_col == last_pawn_move["target_col"]:
-                        visual_board.np_matrix[last_pawn_move["target_row"]][last_pawn_move["target_col"]] = 0
-
-            last_pawn_move.clear()
-            last_pawn_move.update({
-                "start_row": start_row,
-                "target_col": target_square_col,
-                "target_row": target_square_row,
-                "last_move": True
-            })
-        else:
-            last_pawn_move["last_move"] = False
-
-        visual_board.move(start_row, start_col, target_square_row, target_square_col, pieces)
-        other_color = "black" if turn_holder else "white"
-        return get_game_state(visual_board.np_matrix, other_color, last_pawn_move, visual_board)
-    except IndexError as e:
-        print(e)
-        return None
-
-
-def starting_pos():
-    pieces_row = np.array([4, 2, 3, 5, 6, 3, 2, 4])
-    pawns_row = np.ones(8)
-    board = np.zeros((8, 8))
-    board[0] = -pieces_row
-    board[1] = -pawns_row
-    board[6] = pawns_row
-    board[7] = pieces_row
-    return board
-
 
 class Piece:
     def __init__(self, value, row, column, size, board_offset_x, board_offset_y):
@@ -193,7 +142,7 @@ class Board(pygame.sprite.Sprite):
         self.selected_squares.clear()
         self.selected_piece = 0
 
-    def move(self, start_row, start_col, end_row, end_col, pieces):
+    def move(self, start_row, start_col, end_row, end_col, pieces, whiteTurn):
         piece_val = self.np_matrix[start_row][start_col]
 
         if abs(piece_val) == 6:
@@ -212,7 +161,7 @@ class Board(pygame.sprite.Sprite):
         elif piece_val == -4 and start_row == 0 and start_col == 7: self.black_rook_h_moved = True
 
         self.np_matrix[start_row][start_col] = 0.
-        self.np_matrix[end_row][end_col] = self.selected_piece
+        self.np_matrix[end_row][end_col] = piece_val
         self.sincronize_np(self.np_matrix, pieces)
         self.selected_squares.clear()
         self.selected_piece = 0
@@ -358,6 +307,61 @@ class GameOverUI:
             return "quit"
         return None
 
+def move_piece(pos, visual_board:Board, square_width, pieces, turn_holder, last_pawn_move):
+    target_square_col = (pos[0] - visual_board.offset_x) // square_width
+    target_square_row = (pos[1] - visual_board.offset_y) // square_width
+
+    if target_square_col > 7 or target_square_col < 0: return None
+    if target_square_row > 7 or target_square_row < 0: return None
+    try:
+        start_row, start_col = visual_board.selected_squares[0]
+        if start_row == target_square_row and start_col == target_square_col:
+            visual_board.stop_selecting()
+            return None
+        if not (target_square_row, target_square_col) in visual_board.selected_squares or (target_square_row, target_square_col) == (start_row, start_col):
+            return None
+
+        if abs(visual_board.np_matrix[start_row][start_col]) == 1:
+            if visual_board.np_matrix[start_row][start_col] == 1:
+                if target_square_row == 2:
+                    if last_pawn_move["last_move"] == True and last_pawn_move["target_row"] == 3 and target_square_col == last_pawn_move["target_col"]:
+                        visual_board.np_matrix[last_pawn_move["target_row"]][last_pawn_move["target_col"]] = 0
+            else:
+                if target_square_row == 5:
+                    if last_pawn_move["last_move"] == True and last_pawn_move["target_row"] == 4 and target_square_col == last_pawn_move["target_col"]:
+                        visual_board.np_matrix[last_pawn_move["target_row"]][last_pawn_move["target_col"]] = 0
+
+            last_pawn_move.clear()
+            last_pawn_move.update({
+                "start_row": start_row,
+                "target_col": target_square_col,
+                "target_row": target_square_row,
+                "last_move": True
+            })
+        else:
+            last_pawn_move["last_move"] = False
+
+        visual_board.move(start_row, start_col, target_square_row, target_square_col, pieces,turn_holder)
+        other_color = "black" if turn_holder else "white"
+        return get_game_state(visual_board.np_matrix, other_color, last_pawn_move, visual_board)
+    except IndexError as e:
+        print(e)
+        return None
+
+
+def starting_pos():
+    pieces_row = np.array([4, 2, 3, 5, 6, 3, 2, 4])
+    pawns_row = np.ones(8)
+    board = np.zeros((8, 8))
+    board[0] = -pieces_row
+    board[1] = -pawns_row
+    board[6] = pawns_row
+    board[7] = pieces_row
+    return board
+
+
+
+
 
 def make_board(square_width, screen_w, screen_h, pieces):
     logic_matrix = starting_pos()
@@ -444,6 +448,17 @@ def main():
                                 gameover_ui = GameOverUI(state, square_width, off_x, off_y)
                             else:
                                 whiteTurn = not whiteTurn
+            if not whiteTurn and not gameover_ui and not promotion_ui:
+                move_chosen = bot.get_move(visual_board, "black", last_pawn_move)
+                if move_chosen:
+                    visual_board.move(move_chosen[0][0], move_chosen[0][1], move_chosen[1][0], move_chosen[1][1], pieces, whiteTurn)
+                    other_color = "white"
+
+                    state = get_game_state(visual_board.np_matrix, other_color, last_pawn_move, visual_board)
+                    if state in ("checkmate", "stalemate"):
+                        gameover_ui = GameOverUI(state, square_width, off_x, off_y)
+                    else:
+                        whiteTurn = True
 
         screen.fill("black")
         visual_board.draw(screen)
@@ -452,10 +467,12 @@ def main():
         if gameover_ui:
             gameover_ui.draw(screen)
         pygame.display.flip()
-        clock.tick(60)
+        clock.tick(30)
 
     pygame.quit()
 
 
 if __name__ == "__main__":
     main()
+    
+    
